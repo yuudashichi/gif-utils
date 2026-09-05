@@ -229,7 +229,7 @@ internal static class GifTrimChecks
                     var expander = (Expander)window.FindName("GifTrimExpander");
                     var editor = (GifTrimEditor)window.FindName("GifTrimPanel");
                     var scroll = (ScrollViewer)window.FindName("GifScrollViewer");
-                    check(!expander.IsExpanded && !editor.IsVisible, "真实界面默认折叠且不另开预览窗口");
+                    check(expander.IsExpanded && editor.IsVisible, "真实界面默认展开内嵌预览");
                     expander.IsExpanded = true;
                     for (var i = 0; i < 200 && (vm.GifTrim.Frame is null || vm.GifTrim.Thumbnails.Count < 8); i++) await Task.Delay(50);
                     check(vm.GifTrim.Frame is not null && vm.GifTrim.Thumbnails.Count == 8, "真实 WPF 页面显示 FFmpeg 视频画面与缩略图");
@@ -239,13 +239,18 @@ internal static class GifTrimChecks
                     scroll.ScrollToBottom();
                     await Task.Delay(100);
                     var timeline = (RangeTimeline)editor.FindName("Timeline");
-                    check(timeline.ActualWidth > 300 && scroll.ScrollableWidth < 0.5 && scroll.ScrollableHeight > 0,
-                        "展开后允许纵向滚动，时间轴和视频区域无横向溢出");
+                    window.Activate();
+                    timeline.Focus();
+                    await Task.Delay(100);
+                    check(timeline.ActualWidth > 300 && scroll.ScrollableWidth < 0.5 && scroll.ScrollableHeight >= 0,
+                        "预览按需纵向滚动，时间轴和视频区域无横向溢出");
                     check(vm.GifStartTimeText == "2.25" && vm.GifEndTimeText == "3.25", "内嵌选区直接同步主页面的实际转换参数");
                     void PointerAt(string method, double x, double y = 27)
                     {
                         typeof(RangeTimeline).GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)!
                             .Invoke(timeline, [new Point(x, y)]);
+                        if (method == "BeginPointer" && !timeline.IsMouseCaptured)
+                            throw new InvalidOperationException($"Timeline could not capture the mouse: active={window.IsActive}, visible={timeline.IsVisible}, enabled={timeline.IsEnabled}, duration={timeline.Duration}, position={timeline.PointToScreen(new Point())}");
                     }
                     double X(double seconds) => 10 + (timeline.ActualWidth - 20) * seconds / vm.GifTrim.Duration;
                     PointerAt("BeginPointer", X(1.2));
@@ -322,7 +327,7 @@ internal static class GifTrimChecks
                     check(timeline.ToolTip is null && ((Grid)editor.FindName("PreviewViewport")).ToolTip is null, "时间轴与预览画面均无悬浮提示");
                     var playButton = (Button)editor.FindName("PlaySelectionButton");
                     var loopButton = (ToggleButton)editor.FindName("LoopSelectionButton");
-                    check(playButton.Content is Grid && playButton.ActualWidth == 28 && AutomationProperties.GetName(playButton).Length > 0
+                    check(playButton.Content is Grid && playButton.ActualWidth == 36 && AutomationProperties.GetName(playButton).Length > 0
                           && ((Button)editor.FindName("ResetSelectionButton")).Content is Grid, "紧凑矢量图标按钮具有可访问名称");
                     loopButton.IsChecked = true;
                     check(vm.GifTrim.Loop && vm.GifTrim.LoopText.Contains("已开启"), "循环图标切换开启状态并提供明确反馈");

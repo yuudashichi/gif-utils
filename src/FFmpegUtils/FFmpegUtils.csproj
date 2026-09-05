@@ -8,6 +8,7 @@
     <AssemblyName>GIFUtils</AssemblyName>
     <AssemblyTitle>GIF Utils</AssemblyTitle>
     <Product>GIF Utils</Product>
+    <Version>1.1.0</Version>
     <Description>GIF Utils</Description>
     <RootNamespace>FFmpegUtils</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>

@@ -21,6 +21,10 @@ public sealed class ImageInfoViewModel : ObservableObject
     private string _error = "";
     private bool _isReading;
     private ImageMetadataInfo _details = ImageMetadataInfo.Empty;
+    private System.Windows.Media.Imaging.BitmapSource? _previewImage;
+    private string _previewMessage = "选择或拖入图片，即可在此预览";
+    public System.Windows.Media.Imaging.BitmapSource? PreviewImage { get => _previewImage; private set => SetProperty(ref _previewImage, value); }
+    public string PreviewMessage { get => _previewMessage; private set => SetProperty(ref _previewMessage, value); }
 
     public ImageInfoViewModel(Func<string, Task<ImageMetadataInfo>>? read = null,
         Func<ImageCoordinates, CancellationToken, Task<ImageAddress>>? resolve = null)
@@ -63,6 +67,9 @@ public sealed class ImageInfoViewModel : ObservableObject
         AddressDetail = "城市与地址来自地图匹配，并非图片原始记录。";
         AddressStatus = "等待读取 GPS";
         InputPath = path;
+        PreviewImage = null;
+        PreviewMessage = "正在加载预览…";
+        var previewTask = LoadPreviewAsync(path, version);
         Details = ImageMetadataInfo.Empty;
         Error = "";
         Status = "正在读取图片…";
@@ -98,6 +105,15 @@ public sealed class ImageInfoViewModel : ObservableObject
         {
             if (version == _requestVersion) IsReading = false;
         }
+        await previewTask;
+    }
+
+    private async Task LoadPreviewAsync(string path, int version)
+    {
+        var image = await ImagePreviewService.LoadAsync(path);
+        if (version != _requestVersion) return;
+        PreviewImage = image;
+        PreviewMessage = image is null ? "此图片暂不可预览，仍可查看可读取的元数据" : "";
     }
 
     // Called only after the user explicitly confirms sharing coordinates in the UI.

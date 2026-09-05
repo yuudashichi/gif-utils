@@ -47,10 +47,10 @@ public sealed class MainViewModel : ObservableObject
     private string _gifInputPath = string.Empty;
     private string _gifOutputPath = string.Empty;
     private string _gifMediaSummary = "未选择 MP4";
-    private string _selectedGifPreset = "均衡";
-    private string _gifMaxWidth = "720";
-    private string _gifFrameRate = "15";
-    private string _gifColors = "192";
+    private string _selectedGifPreset = "高清";
+    private string _gifMaxWidth = "960";
+    private string _gifFrameRate = "20";
+    private string _gifColors = "256";
     private string _selectedDither = "平滑（推荐）";
     private string _gifTargetSizeText = "5";
     private double _gifProgress;
@@ -228,6 +228,10 @@ public sealed class MainViewModel : ObservableObject
     }
 
     public bool HasActiveJob => IsGifRunning || IsSubtitleRunning || IsXBusy;
+    private string _lastGifOutputPath = "";
+    private string _lastSubtitleOutputPath = "";
+    public string LastGifOutputPath { get => _lastGifOutputPath; private set => SetProperty(ref _lastGifOutputPath, value); }
+    public string LastSubtitleOutputPath { get => _lastSubtitleOutputPath; private set => SetProperty(ref _lastSubtitleOutputPath, value); }
 
     public async Task InitializeAsync()
     {
@@ -389,6 +393,7 @@ public sealed class MainViewModel : ObservableObject
         try
         {
             var result = await _gifService.ConvertAsync(_installation, _gifMedia, options!, progress, _gifCancellation.Token);
+            LastGifOutputPath = result.OutputPath;
             GifStatus = "转换完成";
             GifDetail = $"{MediaInfo.FormatBytes(result.FileSizeBytes)} · {result.Attempts} 轮编码";
             if (!string.IsNullOrWhiteSpace(result.Warning))
@@ -469,6 +474,7 @@ public sealed class MainViewModel : ObservableObject
                 subtitleCrf,
                 VideoEncoder: subtitleVideoEncoder);
             var result = await _subtitleService.BurnAsync(_installation, _subtitleMedia, options, progress, _subtitleCancellation.Token);
+            LastSubtitleOutputPath = result.OutputPath;
             SubtitleStatus = "烧录完成";
             SubtitleDetail = string.IsNullOrWhiteSpace(result.EncoderName)
                 ? MediaInfo.FormatBytes(result.FileSizeBytes)

@@ -3,18 +3,17 @@ using System.IO;
 using System.Diagnostics;
 using System.Reflection;
 using System.Windows;
-using System.Windows.Automation;
-using System.Windows.Controls;
-using System.Windows.Controls.Primitives;
-using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Threading;
 using FFmpegUtils.Models;
 using FFmpegUtils.Services;
 using FFmpegUtils.ViewModels;
 
 var failures = new List<string>();
+
+if (args is ["--render-modern", var reviewDirectory])
+{
+    ModernUiChecks.Run(Check, reviewDirectory);
+    return failures.Count == 0 ? 0 : 1;
+}
 
 if (args is ["--gif-trim-integration", var trimFfmpeg, var trimDirectory])
 {
@@ -51,21 +50,6 @@ if (args is ["--x-download", var xDownloadUrl, var xOutputDirectory, var xFfmpeg
     return await RunXDownloadIntegrationAsync(xDownloadUrl, xOutputDirectory, xFfmpegPath);
 }
 
-if (args is ["--render-x", var xScreenshotPath])
-{
-    return RenderXPage(xScreenshotPath);
-}
-
-if (args is ["--render-x-quality", var xQualityScreenshotPath])
-{
-    return RenderXPage(xQualityScreenshotPath, includeQualitySample: true);
-}
-
-if (args is ["--render-image-info", var imageInfoScreenshotPath])
-{
-    return RenderXPage(imageInfoScreenshotPath, includeImageInfoSample: true);
-}
-
 CheckWindowConstruction();
 var applicationAssembly = typeof(FFmpegUtils.MainWindow).Assembly;
 Check(applicationAssembly.GetName().Name == "GIFUtils"
@@ -74,6 +58,7 @@ Check(applicationAssembly.GetName().Name == "GIFUtils"
     "程序名称与文件属性统一为 GIF Utils");
 await GifTrimChecks.RunAsync(Check);
 await ImageMetadataChecks.RunAsync(Check);
+await ImagePreviewChecks.RunAsync(Check);
 await ImageGeocodingChecks.RunAsync(Check);
 CheckNumericValidation();
 CheckXUrlNormalization();
@@ -146,341 +131,7 @@ void Check(bool condition, string name)
     }
 }
 
-void CheckWindowConstruction()
-{
-    Exception? windowError = null;
-    var compactWindow = false;
-    var wheelSuppressed = false;
-    var comboWheelScrollsPage = false;
-    var inputWheelScrollsPage = false;
-    var popupAlignedAndEqualWidth = false;
-    var gifFitsWithoutScrolling = false;
-    var gifScrollableHeight = 0d;
-    var gifFitsWithoutHorizontalOverflow = false;
-    var gifScrollableWidth = 0d;
-    var subtitleFitsWithoutScrolling = false;
-    var subtitleFitsWithoutHorizontalOverflow = false;
-    var subtitleScrollableWidth = 0d;
-    var headerActionsMoved = false;
-    var headerProgressMoved = false;
-    var engineSelectorMoved = false;
-    var engineSelectorsCentered = false;
-    var mouseFocusCueHidden = false;
-    var keyboardFocusCueVisible = false;
-    var keyboardFocusCueDiagnostic = string.Empty;
-    var emptyEngineErrorRowsCollapsed = false;
-    var subtitleVideoEncoderSelectorPresent = false;
-    var xTabPresent = false;
-    var xFitsWithoutScrolling = false;
-    var xScrollableHeight = 0d;
-    var xFitsWithoutHorizontalOverflow = false;
-    var xScrollableWidth = 0d;
-    var xHeaderActionsPresent = false;
-    var xHeaderProgressPresent = false;
-    var xEngineSelectorCentered = false;
-    var xMediaListOwnsScrolling = false;
-    var xQualityTextRendered = false;
-    var xQualityPopupNoHorizontalScroll = false;
-    var xQualityWidthSufficient = false;
-    var appIconPresent = false;
-    var appNameMatches = false;
-    var imageTabPresent = false;
-    var imagePageFits = false;
-    var imageFieldsReadOnly = false;
-    var imagePageHasNoConversionControls = false;
-    var imageValuesRendered = false;
-    var imageWheelScrollsPage = false;
-    var xBindingsClean = false;
-    var xBindingError = string.Empty;
-    var thread = new Thread(() =>
-    {
-        var bindingTrace = PresentationTraceSources.DataBindingSource;
-        var previousBindingTraceLevel = bindingTrace.Switch.Level;
-        var bindingListener = new CollectingTraceListener();
-        try
-        {
-            bindingTrace.Listeners.Add(bindingListener);
-            bindingTrace.Switch.Level = SourceLevels.Warning;
-            var window = new FFmpegUtils.MainWindow();
-            appIconPresent = window.Icon is not null;
-            compactWindow = window.Width == 780 && window.Height == 540;
-            window.Show();
-            window.UpdateLayout();
-            window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
-
-            appNameMatches = window.Title == "GIF Utils"
-                && FindVisualChildren<TextBlock>(window).Any(text => text.IsVisible && text.Text == "GIF Utils")
-                && !FindVisualChildren<TextBlock>(window).Any(text => text.IsVisible && text.Text == "FFmpeg Utils");
-
-            var tabs = (TabControl)window.FindName("MainTabs");
-            var gifScrollViewer = (ScrollViewer)((TabItem)tabs.Items[0]).Content;
-            gifScrollableHeight = gifScrollViewer.ScrollableHeight;
-            gifFitsWithoutScrolling = gifScrollViewer.ScrollableHeight < 0.5;
-            gifScrollableWidth = gifScrollViewer.ScrollableWidth;
-            gifFitsWithoutHorizontalOverflow = gifScrollViewer.ScrollableWidth < 0.5;
-
-            var visibleButtons = FindVisualChildren<Button>(window).Where(button => button.IsVisible).ToList();
-            var startButton = visibleButtons.FirstOrDefault(button => Equals(button.Content, "开始转换"));
-            var selectEngineButton = visibleButtons.FirstOrDefault(button => Equals(button.Content, "选择 FFmpeg"));
-            headerActionsMoved = startButton is not null && FindVisualParent<ScrollViewer>(startButton) is null;
-            engineSelectorMoved = selectEngineButton is not null && FindVisualParent<ScrollViewer>(selectEngineButton) == gifScrollViewer;
-            var gifEngineSelectorCentered = selectEngineButton is not null
-                && Grid.GetRowSpan(selectEngineButton) == 2
-                && selectEngineButton.VerticalAlignment == VerticalAlignment.Center;
-            if (selectEngineButton is not null)
-            {
-                selectEngineButton.ApplyTemplate();
-                window.SetCurrentValue(FFmpegUtils.MainWindow.ShowKeyboardFocusCuesProperty, false);
-                window.Activate();
-                Keyboard.Focus(selectEngineButton);
-                window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
-                var focusBorder = selectEngineButton.Template.FindName("FocusBorder", selectEngineButton) as Border;
-                mouseFocusCueHidden = selectEngineButton.IsKeyboardFocused
-                    && selectEngineButton.FocusVisualStyle is null
-                    && focusBorder?.BorderBrush is SolidColorBrush { Color.A: 0 };
-
-                window.SetCurrentValue(FFmpegUtils.MainWindow.ShowKeyboardFocusCuesProperty, true);
-                window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
-                keyboardFocusCueVisible = selectEngineButton.IsKeyboardFocused
-                    && focusBorder?.BorderBrush is SolidColorBrush { Color.A: > 0 };
-                keyboardFocusCueDiagnostic = $"focus={selectEngineButton.IsKeyboardFocused}, mode={window.ShowKeyboardFocusCues}, brush={focusBorder?.BorderBrush}";
-                window.SetCurrentValue(FFmpegUtils.MainWindow.ShowKeyboardFocusCuesProperty, false);
-            }
-            headerProgressMoved = FindVisualChildren<ProgressBar>(window)
-                .Any(progressBar => progressBar.IsVisible && FindVisualParent<ScrollViewer>(progressBar) is null);
-
-            tabs.SelectedIndex = 1;
-            window.UpdateLayout();
-            window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
-            var subtitleScrollViewer = (ScrollViewer)((TabItem)tabs.Items[1]).Content;
-            subtitleFitsWithoutScrolling = subtitleScrollViewer.ScrollableHeight < 0.5;
-            subtitleScrollableWidth = subtitleScrollViewer.ScrollableWidth;
-            subtitleFitsWithoutHorizontalOverflow = subtitleScrollViewer.ScrollableWidth < 0.5;
-            var subtitleEngineSelector = FindVisualChildren<Button>(window)
-                .FirstOrDefault(button => button.IsVisible && Equals(button.Content, "选择 FFmpeg"));
-            engineSelectorsCentered = gifEngineSelectorCentered
-                && subtitleEngineSelector is not null
-                && Grid.GetRowSpan(subtitleEngineSelector) == 2
-                && subtitleEngineSelector.VerticalAlignment == VerticalAlignment.Center;
-            emptyEngineErrorRowsCollapsed = window.FindName("GifEngineErrorText") is TextBlock { Visibility: Visibility.Collapsed }
-                && window.FindName("SubtitleEngineErrorText") is TextBlock { Visibility: Visibility.Collapsed };
-            var videoEncoderSelector = FindVisualChildren<ComboBox>(window)
-                .FirstOrDefault(item => item.Items.Cast<object?>().Any(value => Equals(value, SubtitleVideoEncoderCatalog.NvidiaDisplayName)));
-            subtitleVideoEncoderSelectorPresent = videoEncoderSelector is not null
-                && videoEncoderSelector.Items.Count == SubtitleVideoEncoderCatalog.DisplayNames.Count
-                && Equals(videoEncoderSelector.SelectedItem, SubtitleVideoEncoderCatalog.AutoDisplayName);
-
-            xTabPresent = tabs.Items.Count == 4
-                && tabs.Items[2] is TabItem { Name: "XDownloadTab" } xTab
-                && Equals(xTab.Header, "X 下载");
-            tabs.SelectedIndex = 2;
-            window.UpdateLayout();
-            window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
-            if (tabs.Items[2] is TabItem { Content: ScrollViewer xScrollViewer })
-            {
-                xScrollableHeight = xScrollViewer.ScrollableHeight;
-                xFitsWithoutScrolling = xScrollViewer.ScrollableHeight < 0.5;
-                xScrollableWidth = xScrollViewer.ScrollableWidth;
-                xFitsWithoutHorizontalOverflow = xScrollViewer.ScrollableWidth < 0.5;
-
-                var xButtons = FindVisualChildren<Button>(window).Where(button => button.IsVisible).ToList();
-                var startDownload = xButtons.FirstOrDefault(button => Equals(button.Content, "开始下载"));
-                var cancelDownload = xButtons.FirstOrDefault(button => Equals(button.Content, "取消"));
-                xHeaderActionsPresent = startDownload is not null
-                    && cancelDownload is not null
-                    && FindVisualParent<ScrollViewer>(startDownload) is null
-                    && FindVisualParent<ScrollViewer>(cancelDownload) is null;
-                xHeaderProgressPresent = FindVisualChildren<ProgressBar>(window)
-                    .Any(progressBar => progressBar.IsVisible && FindVisualParent<ScrollViewer>(progressBar) is null);
-
-                var xEngineSelector = xButtons.FirstOrDefault(button => Equals(button.Content, "选择 FFmpeg"));
-                xEngineSelectorCentered = xEngineSelector is not null
-                    && FindVisualParent<ScrollViewer>(xEngineSelector) == xScrollViewer
-                    && Grid.GetRowSpan(xEngineSelector) == 2
-                    && xEngineSelector.VerticalAlignment == VerticalAlignment.Center;
-                engineSelectorsCentered = engineSelectorsCentered && xEngineSelectorCentered;
-                emptyEngineErrorRowsCollapsed = emptyEngineErrorRowsCollapsed
-                    && window.FindName("XEngineErrorText") is TextBlock { Visibility: Visibility.Collapsed };
-
-                var mediaList = FindVisualChildren<ListBox>(window)
-                    .FirstOrDefault(listBox => AutomationProperties.GetName(listBox) == "解析到的 X 媒体列表");
-                var mediaScrollViewer = mediaList is null
-                    ? null
-                    : FindVisualChildren<ScrollViewer>(mediaList).FirstOrDefault();
-                xMediaListOwnsScrolling = mediaList is not null
-                    && mediaScrollViewer is not null
-                    && mediaScrollViewer != xScrollViewer
-                    && ScrollViewer.GetVerticalScrollBarVisibility(mediaList) == ScrollBarVisibility.Auto
-                    && ScrollViewer.GetHorizontalScrollBarVisibility(mediaList) == ScrollBarVisibility.Disabled;
-
-                if (mediaList is not null && window.DataContext is MainViewModel viewModel)
-                {
-                    const string qualityLabel = "720×814 · 2176 kbps · MP4 直链（最高）";
-                    var quality = new XQualityOption(qualityLabel, "http-2176+bestaudio/best", 720, 814, 2176, false, true, "http-2176");
-                    viewModel.XMediaItems.Add(new XMediaItem(1, 1, "test-video", "媒体 1", "", "视频", 6, [quality]));
-                    window.UpdateLayout();
-                    window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
-
-                    var qualityCombo = FindVisualChildren<ComboBox>(mediaList)
-                        .FirstOrDefault(item => AutomationProperties.GetName(item) == "下载画质");
-                    if (qualityCombo is not null)
-                    {
-                        qualityCombo.ApplyTemplate();
-                        window.UpdateLayout();
-                        xQualityWidthSufficient = qualityCombo.ActualWidth >= 284;
-                        xQualityTextRendered = FindVisualChildren<TextBlock>(qualityCombo)
-                            .Any(text => text.Text == qualityLabel);
-
-                        qualityCombo.IsDropDownOpen = true;
-                        window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
-                        if (qualityCombo.Template.FindName("PART_Popup", qualityCombo) is Popup { Child: FrameworkElement qualityPopupChild })
-                        {
-                            var popupScrollViewer = FindVisualChildren<ScrollViewer>(qualityPopupChild).FirstOrDefault();
-                            xQualityPopupNoHorizontalScroll = popupScrollViewer is not null
-                                && popupScrollViewer.HorizontalScrollBarVisibility == ScrollBarVisibility.Disabled
-                                && Math.Abs(qualityPopupChild.ActualWidth - qualityCombo.ActualWidth) < 1;
-                        }
-
-                        qualityCombo.IsDropDownOpen = false;
-                    }
-                }
-            }
-
-            tabs.SelectedIndex = 3;
-            window.UpdateLayout();
-            window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
-            imageTabPresent = tabs.Items[3] is TabItem { Name: "ImageInfoTab" } imageTab && Equals(imageTab.Header, "图片信息");
-            var imageScroll = (ScrollViewer)window.FindName("ImageInfoScrollViewer");
-            var imageSample = new ImageInfoViewModel(_ => Task.FromResult(ImageMetadataChecks.Sample()), (_, _) => Task.FromResult(ImageGeocodingChecks.Sample()));
-            imageSample.LoadAsync("sample.jpg").GetAwaiter().GetResult();
-            imageSample.ResolveAddressAsync().GetAwaiter().GetResult();
-            imageScroll.DataContext = imageSample;
-            window.UpdateLayout();
-            imagePageFits = imageScroll.ScrollableHeight < 0.5 && imageScroll.ScrollableWidth < 0.5;
-            var imageValues = FindVisualChildren<TextBox>(imageScroll).Where(box => box.IsVisible).ToArray();
-            imageFieldsReadOnly = imageValues.Length == 22 && imageValues.All(box => box.IsReadOnly);
-            imagePageHasNoConversionControls = FindVisualChildren<Button>(window).Where(button => button.IsVisible)
-                .All(button => Equals(button.Content, "选择图片") || Equals(button.Content, "解析地址"));
-            imageValuesRendered = imageValues.Any(box => box.Text == "Example Camera")
-                && imageValues.Any(box => box.Text == "南纬 33.500000°")
-                && imageValues.Any(box => box.Text == "3000 × 4000 px")
-                && imageValues.Any(box => box.Text.Contains("北京市"));
-            window.MinHeight = 260;
-            window.Height = 300;
-            window.Width = 700;
-            window.UpdateLayout();
-            var imageWheel = new MouseWheelEventArgs(Mouse.PrimaryDevice, Environment.TickCount, -120)
-            { RoutedEvent = UIElement.PreviewMouseWheelEvent, Source = imageValues[0] };
-            imageValues[0].RaiseEvent(imageWheel);
-            window.Dispatcher.Invoke(() => { }, DispatcherPriority.Background);
-            imageWheelScrollsPage = imageWheel.Handled && imageScroll.VerticalOffset > 0 && imageScroll.ScrollableWidth < 0.5;
-            window.Width = 780;
-            window.Height = 540;
-
-            bindingTrace.Flush();
-            xBindingError = bindingListener.Text;
-            xBindingsClean = !ContainsBindingError(xBindingError);
-
-            tabs.SelectedIndex = 0;
-            window.MinHeight = 260;
-            window.Height = 260;
-            window.UpdateLayout();
-            window.Dispatcher.Invoke(() => { }, DispatcherPriority.Background);
-
-            var textBox = FindVisualChildren<TextBox>(window).First();
-            if (FindVisualParent<ScrollViewer>(textBox) is { } textBoxScrollViewer)
-            {
-                textBoxScrollViewer.ScrollToTop();
-                var textBoxWheelEvent = new MouseWheelEventArgs(Mouse.PrimaryDevice, Environment.TickCount, -120)
-                {
-                    RoutedEvent = UIElement.PreviewMouseWheelEvent,
-                    Source = textBox
-                };
-                textBox.RaiseEvent(textBoxWheelEvent);
-                window.Dispatcher.Invoke(() => { }, DispatcherPriority.Background);
-                inputWheelScrollsPage = textBoxWheelEvent.Handled && textBoxScrollViewer.VerticalOffset > 0;
-                textBoxScrollViewer.ScrollToTop();
-            }
-
-            var combo = FindVisualChildren<ComboBox>(window).First(item => item.Items.Count > 0);
-            combo.ApplyTemplate();
-            combo.SelectedIndex = 0;
-            var selectionBeforeWheel = combo.SelectedIndex;
-            var wheelEvent = new MouseWheelEventArgs(Mouse.PrimaryDevice, Environment.TickCount, -120)
-            {
-                RoutedEvent = UIElement.PreviewMouseWheelEvent,
-                Source = combo
-            };
-            combo.RaiseEvent(wheelEvent);
-            window.Dispatcher.Invoke(() => { }, DispatcherPriority.Background);
-            wheelSuppressed = wheelEvent.Handled && combo.SelectedIndex == selectionBeforeWheel;
-            comboWheelScrollsPage = FindVisualParent<ScrollViewer>(combo)?.VerticalOffset > 0;
-
-            combo.IsDropDownOpen = true;
-            window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
-            if (combo.Template.FindName("PART_Popup", combo) is Popup { Child: FrameworkElement popupChild } popup)
-            {
-                var comboLeft = combo.PointToScreen(new Point()).X;
-                var popupLeft = popupChild.PointToScreen(new Point()).X;
-                popupAlignedAndEqualWidth = popup.PlacementTarget == combo
-                    && Math.Abs(popupChild.ActualWidth - combo.ActualWidth) < 1
-                    && Math.Abs(popupLeft - comboLeft) < 2;
-            }
-
-            combo.IsDropDownOpen = false;
-            window.Close();
-        }
-        catch (Exception ex)
-        {
-            windowError = ex;
-        }
-        finally
-        {
-            bindingTrace.Listeners.Remove(bindingListener);
-            bindingTrace.Switch.Level = previousBindingTraceLevel;
-        }
-    });
-    thread.SetApartmentState(ApartmentState.STA);
-    thread.Start();
-    thread.Join();
-    Check(windowError is null, windowError is null ? "主窗口 XAML 与绑定初始化" : $"主窗口初始化：{windowError.Message}");
-    Check(appIconPresent, "主窗口加载应用图标");
-    Check(appNameMatches, "窗口标题和页面标题统一为 GIF Utils");
-    Check(imageTabPresent, "第四页为图片信息");
-    Check(imagePageFits, "图片信息页默认无需纵向或横向滚动");
-    Check(imageFieldsReadOnly, "图片信息包含 19 个原始只读字段、2 个地址字段与路径");
-    Check(imagePageHasNoConversionControls, "图片信息页不显示 FFmpeg 选择或转换按钮");
-    Check(imageValuesRendered, "图片尺寸、拍摄信息、地理位置真实绑定到页面");
-    Check(imageWheelScrollsPage, "缩小图片页面后输入框滚轮可滚动，无横向溢出");
-    Check(compactWindow, "默认窗口尺寸为 780×540");
-    Check(gifFitsWithoutScrolling, gifFitsWithoutScrolling ? "GIF 页面默认无需纵向滚动" : $"GIF 页面溢出 {gifScrollableHeight:0.##} px");
-    Check(gifFitsWithoutHorizontalOverflow, gifFitsWithoutHorizontalOverflow ? "GIF 页面默认无横向溢出" : $"GIF 页面横向溢出 {gifScrollableWidth:0.##} px");
-    Check(subtitleFitsWithoutScrolling, "字幕页面默认无需纵向滚动");
-    Check(subtitleFitsWithoutHorizontalOverflow, subtitleFitsWithoutHorizontalOverflow ? "字幕页面默认无横向溢出" : $"字幕页面横向溢出 {subtitleScrollableWidth:0.##} px");
-    Check(headerActionsMoved, "开始与取消操作位于顶部");
-    Check(headerProgressMoved, "进度条位于顶部标题下方");
-    Check(engineSelectorMoved, "FFmpeg 选择位于页面内容顶部");
-    Check(engineSelectorsCentered, "三页的 FFmpeg 选择按钮在状态框内垂直居中");
-    Check(mouseFocusCueHidden, "鼠标切换页面时按钮不显示焦点框");
-    Check(keyboardFocusCueVisible, keyboardFocusCueVisible ? "键盘导航时保留可见焦点框" : $"键盘焦点框诊断：{keyboardFocusCueDiagnostic}");
-    Check(emptyEngineErrorRowsCollapsed, "无 FFmpeg 错误时折叠空错误行并居中状态内容");
-    Check(subtitleVideoEncoderSelectorPresent, "字幕页提供自动、CPU、NVIDIA、Intel、AMD 编码方式");
-    Check(xTabPresent, "WPF 第三页为 X 下载");
-    Check(xFitsWithoutScrolling, xFitsWithoutScrolling ? "X 页面默认无需页面纵向滚动" : $"X 页面溢出 {xScrollableHeight:0.##} px");
-    Check(xFitsWithoutHorizontalOverflow, xFitsWithoutHorizontalOverflow ? "X 页面默认无横向溢出" : $"X 页面横向溢出 {xScrollableWidth:0.##} px");
-    Check(xHeaderActionsPresent, "X 开始下载与取消操作位于顶部");
-    Check(xHeaderProgressPresent, "X 下载进度位于顶部标题下方");
-    Check(xEngineSelectorCentered, "X 页 FFmpeg 选择按钮在状态框内居中");
-    Check(xMediaListOwnsScrolling, "X 媒体列表使用独立纵向滚动且禁用横向滚动");
-    Check(xQualityTextRendered, "X 画质下拉框使用 DisplayName 模板而不是对象名称");
-    Check(xQualityWidthSufficient, "X 画质下拉框可容纳完整画质说明");
-    Check(xQualityPopupNoHorizontalScroll, "X 画质下拉选项等宽且不显示横向滚动条");
-    Check(xBindingsClean, xBindingsClean ? "X 页绑定无运行时错误" : $"X 页绑定错误：{FirstLine(xBindingError)}");
-    Check(wheelSuppressed, "关闭的下拉框忽略滚轮切换");
-    Check(inputWheelScrollsPage, "输入框上滚轮可滚动页面");
-    Check(comboWheelScrollsPage, "关闭的下拉框上滚轮可滚动页面");
-    Check(popupAlignedAndEqualWidth, "下拉选项左对齐且与下拉框等宽");
-}
+void CheckWindowConstruction() => ModernUiChecks.Run(Check);
 
 void CheckNumericValidation()
 {
@@ -844,49 +495,6 @@ void CheckXFriendlyErrors()
         "X 技术错误详情截断且保留友好消息");
 }
 
-IEnumerable<T> FindVisualChildren<T>(DependencyObject root) where T : DependencyObject
-{
-    for (var index = 0; index < VisualTreeHelper.GetChildrenCount(root); index++)
-    {
-        var child = VisualTreeHelper.GetChild(root, index);
-        if (child is T match)
-        {
-            yield return match;
-        }
-
-        foreach (var descendant in FindVisualChildren<T>(child))
-        {
-            yield return descendant;
-        }
-    }
-}
-
-T? FindVisualParent<T>(DependencyObject child) where T : DependencyObject
-{
-    for (var current = VisualTreeHelper.GetParent(child); current is not null; current = VisualTreeHelper.GetParent(current))
-    {
-        if (current is T match)
-        {
-            return match;
-        }
-    }
-
-    return null;
-}
-
-bool ContainsBindingError(string trace)
-    => trace.Contains("System.Windows.Data Error", StringComparison.OrdinalIgnoreCase)
-       || trace.Contains("BindingExpression path error", StringComparison.OrdinalIgnoreCase)
-       || trace.Contains("Cannot find source for binding", StringComparison.OrdinalIgnoreCase)
-       || trace.Contains("property not found", StringComparison.OrdinalIgnoreCase)
-       || trace.Contains("cannot retrieve value", StringComparison.OrdinalIgnoreCase);
-
-string FirstLine(string value)
-{
-    var line = value.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "未知绑定错误";
-    return line.Length <= 240 ? line : line[..240] + "…";
-}
-
 async Task<int> RunXParseIntegrationAsync(string url)
 {
     try
@@ -994,100 +602,6 @@ void PrintXParseResult(XParseResult result)
             Console.WriteLine($"QUALITY {item.Index} | {quality.DisplayName} | selector={quality.FormatSelector}");
         }
     }
-}
-
-int RenderXPage(string screenshotPath, bool includeQualitySample = false, bool includeImageInfoSample = false)
-{
-    Exception? renderError = null;
-    var savedPath = Path.GetFullPath(screenshotPath);
-    var thread = new Thread(() =>
-    {
-        FFmpegUtils.MainWindow? window = null;
-        try
-        {
-            var directory = Path.GetDirectoryName(savedPath);
-            if (!string.IsNullOrWhiteSpace(directory))
-            {
-                Directory.CreateDirectory(directory);
-            }
-
-            window = new FFmpegUtils.MainWindow
-            {
-                Width = 780,
-                Height = 540,
-                ShowInTaskbar = false,
-                WindowStartupLocation = WindowStartupLocation.Manual,
-                Left = 0,
-                Top = 0
-            };
-            window.Show();
-            var tabs = (TabControl)window.FindName("MainTabs");
-            tabs.SelectedIndex = includeImageInfoSample ? 3 : 2;
-            if (includeImageInfoSample)
-            {
-                var imageViewModel = new ImageInfoViewModel(_ => Task.FromResult(ImageGeocodingChecks.PhotoSample()), (_, _) => Task.FromResult(ImageGeocodingChecks.Sample()));
-                imageViewModel.LoadAsync(@"C:\示例图片\拍摄信息示例.jpg").GetAwaiter().GetResult();
-                imageViewModel.ResolveAddressAsync().GetAwaiter().GetResult();
-                ((ScrollViewer)window.FindName("ImageInfoScrollViewer")).DataContext = imageViewModel;
-                ((TextBlock)window.FindName("ImageInfoStatusText")).Text = imageViewModel.Status;
-            }
-            if (includeQualitySample && window.DataContext is MainViewModel viewModel)
-            {
-                var quality = new XQualityOption(
-                    "720×814 · 2176 kbps · MP4 直链（最高）",
-                    "http-2176+bestaudio/best",
-                    720,
-                    814,
-                    2176,
-                    false,
-                    true,
-                    "http-2176");
-                viewModel.XMediaItems.Add(new XMediaItem(1, 1, "sample", "媒体 1", "", "视频", 6, [quality]));
-            }
-            window.UpdateLayout();
-            window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
-
-            var dpi = VisualTreeHelper.GetDpi(window);
-            var pixelWidth = Math.Max(1, (int)Math.Ceiling(window.ActualWidth * dpi.DpiScaleX));
-            var pixelHeight = Math.Max(1, (int)Math.Ceiling(window.ActualHeight * dpi.DpiScaleY));
-            var bitmap = new RenderTargetBitmap(
-                pixelWidth,
-                pixelHeight,
-                dpi.PixelsPerInchX,
-                dpi.PixelsPerInchY,
-                PixelFormats.Pbgra32);
-            bitmap.Render(window);
-            var encoder = new PngBitmapEncoder();
-            encoder.Frames.Add(BitmapFrame.Create(bitmap));
-            using var stream = new FileStream(savedPath, FileMode.Create, FileAccess.Write, FileShare.None);
-            encoder.Save(stream);
-        }
-        catch (Exception exception)
-        {
-            renderError = exception;
-        }
-        finally
-        {
-            window?.Close();
-        }
-    });
-    thread.SetApartmentState(ApartmentState.STA);
-    thread.Start();
-    thread.Join();
-    if (renderError is not null)
-    {
-        Console.Error.WriteLine($"X_RENDER_FAILED: {renderError}");
-        return 1;
-    }
-
-    if (!File.Exists(savedPath) || new FileInfo(savedPath).Length <= 0)
-    {
-        Console.Error.WriteLine("X_RENDER_FAILED: 未生成 PNG。\n");
-        return 1;
-    }
-
-    Console.WriteLine($"X_RENDER_OK {savedPath}");
-    return 0;
 }
 
 async Task RunIntegrationAsync(string ffmpegPath, string inputVideo)

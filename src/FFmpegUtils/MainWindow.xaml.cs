@@ -20,6 +20,8 @@ public partial class MainWindow : Window
 
     private static readonly string[] VideoExtensions = [".mp4", ".mkv", ".mov", ".avi", ".webm", ".flv", ".wmv", ".ts", ".mts", ".m4v"];
     private readonly MainViewModel _viewModel = new();
+    private AppTheme _theme;
+    private bool _themeInitialized;
 
     public bool ShowKeyboardFocusCues
     {
@@ -38,6 +40,10 @@ public partial class MainWindow : Window
         InitializeComponent();
         DataContext = _viewModel;
         SystemParameters.StaticPropertyChanged += SystemParameters_StaticPropertyChanged;
+        _theme = AppearanceService.Load();
+        ThemeSelector.SelectedIndex = (int)_theme;
+        _themeInitialized = true;
+        SystemEvents.UserPreferenceChanged += UserPreferenceChanged;
         ApplyTheme();
     }
 
@@ -57,6 +63,7 @@ public partial class MainWindow : Window
             _viewModel.ImageInfo.CancelAddressLookup();
             _viewModel.GifTrim.SetActive(false);
             SystemParameters.StaticPropertyChanged -= SystemParameters_StaticPropertyChanged;
+            SystemEvents.UserPreferenceChanged -= UserPreferenceChanged;
             return;
         }
 
@@ -77,6 +84,7 @@ public partial class MainWindow : Window
         _viewModel.ImageInfo.CancelAddressLookup();
         _viewModel.GifTrim.SetActive(false);
         SystemParameters.StaticPropertyChanged -= SystemParameters_StaticPropertyChanged;
+        SystemEvents.UserPreferenceChanged -= UserPreferenceChanged;
     }
 
     private async void SelectFfmpeg_Click(object sender, RoutedEventArgs e)
@@ -106,17 +114,6 @@ public partial class MainWindow : Window
         {
             await _viewModel.SetGifInputAsync(dialog.FileName);
         }
-    }
-
-    private void GifTrimExpander_Expanded(object sender, RoutedEventArgs e)
-    {
-        Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded, new Action(() =>
-        {
-            if (!GifTrimExpander.IsExpanded) return;
-            GifScrollViewer.UpdateLayout();
-            var top = GifTrimExpander.TranslatePoint(new Point(0, 0), GifScrollViewer).Y;
-            GifScrollViewer.ScrollToVerticalOffset(Math.Max(0, GifScrollViewer.VerticalOffset + top));
-        }));
     }
 
     private async void BrowseImageInfo_Click(object sender, RoutedEventArgs e)
@@ -425,53 +422,50 @@ public partial class MainWindow : Window
         }
     }
 
-    private void ApplyTheme()
-    {
-        if (SystemParameters.HighContrast)
-        {
-            Resources["BackgroundBrush"] = SystemColors.WindowBrush;
-            Resources["SurfaceBrush"] = SystemColors.ControlBrush;
-            Resources["SurfaceRaisedBrush"] = SystemColors.ControlLightBrush;
-            Resources["ControlBrush"] = SystemColors.WindowBrush;
-            Resources["ControlHoverBrush"] = SystemColors.ControlLightBrush;
-            Resources["ControlPressedBrush"] = SystemColors.HighlightBrush;
-            Resources["DisabledBrush"] = SystemColors.ControlBrush;
-            Resources["TextBrush"] = SystemColors.WindowTextBrush;
-            Resources["MutedTextBrush"] = SystemColors.ControlTextBrush;
-            Resources["BorderBrush"] = SystemColors.ActiveBorderBrush;
-            Resources["StrongBorderBrush"] = SystemColors.WindowTextBrush;
-            Resources["AccentBrush"] = SystemColors.HighlightBrush;
-            Resources["AccentHoverBrush"] = SystemColors.HotTrackBrush;
-            Resources["FocusBrush"] = SystemColors.HighlightBrush;
-            Resources["SelectionBrush"] = SystemColors.HighlightBrush;
-            Resources["ErrorBrush"] = SystemColors.WindowTextBrush;
-            Resources["ToolTipBrush"] = SystemColors.InfoBrush;
-            Resources["ScrollThumbBrush"] = SystemColors.ControlDarkBrush;
-            Resources["ScrollThumbHoverBrush"] = SystemColors.HighlightBrush;
-            return;
-        }
+    private void ApplyTheme() => AppearanceService.Apply(Resources, _theme);
 
-        Resources["BackgroundBrush"] = BrushFrom("#F0F0F0");
-        Resources["SurfaceBrush"] = BrushFrom("#F7F7F7");
-        Resources["SurfaceRaisedBrush"] = BrushFrom("#E1E1E1");
-        Resources["ControlBrush"] = BrushFrom("#FFFFFF");
-        Resources["ControlHoverBrush"] = BrushFrom("#E5F1FB");
-        Resources["ControlPressedBrush"] = BrushFrom("#CCE4F7");
-        Resources["DisabledBrush"] = BrushFrom("#EBEBEB");
-        Resources["TextBrush"] = BrushFrom("#111111");
-        Resources["MutedTextBrush"] = BrushFrom("#555555");
-        Resources["BorderBrush"] = BrushFrom("#C7C7C7");
-        Resources["StrongBorderBrush"] = BrushFrom("#8A8A8A");
-        Resources["AccentBrush"] = BrushFrom("#0078D4");
-        Resources["AccentHoverBrush"] = BrushFrom("#005A9E");
-        Resources["FocusBrush"] = BrushFrom("#005FB8");
-        Resources["SelectionBrush"] = BrushFrom("#0078D7");
-        Resources["ErrorBrush"] = BrushFrom("#C42B1C");
-        Resources["ToolTipBrush"] = BrushFrom("#FFFFE1");
-        Resources["ScrollThumbBrush"] = BrushFrom("#C5C5C5");
-        Resources["ScrollThumbHoverBrush"] = BrushFrom("#A6A6A6");
+    private void UserPreferenceChanged(object sender, UserPreferenceChangedEventArgs e)
+    {
+        if (_theme == AppTheme.System && !Dispatcher.HasShutdownStarted)
+            Dispatcher.BeginInvoke(new Action(ApplyTheme));
     }
 
-    private static SolidColorBrush BrushFrom(string value)
-        => new((Color)ColorConverter.ConvertFromString(value));
+    private void OpenSettings_Click(object sender, RoutedEventArgs e) => MainTabs.SelectedItem = SettingsTab;
+
+    private void OpenResult_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: string path }) return;
+        try
+        {
+            if (!File.Exists(path)) throw new FileNotFoundException();
+            Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+        }
+        catch { MessageBox.Show(this, "无法打开结果，文件可能已移动或没有关联应用。请到保存目录查看。", "打开结果"); }
+    }
+
+    private void ThemeSelector_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_themeInitialized || ThemeSelector.SelectedIndex < 0) return;
+        _theme = (AppTheme)ThemeSelector.SelectedIndex;
+        ApplyTheme();
+        try { AppearanceService.Save(_theme); ThemeSaveStatus.Text = ""; }
+        catch { ThemeSaveStatus.Text = "主题已应用，但未能保存设置。请检查本地目录权限。"; }
+    }
+
+    private void Window_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (GifWorkspace is null || ImageWorkspace is null) return;
+        var compact = ActualWidth < 1080;
+        SetColumns(GifWorkspace, GifPreviewCard, GifSettingsCard, compact, 3, 2);
+        SetColumns(ImageWorkspace, ImagePreviewCard, ImageDetailsPanel, compact, 1, 1);
+    }
+
+    private static void SetColumns(Grid grid, FrameworkElement first, FrameworkElement second, bool compact, double left, double right)
+    {
+        grid.ColumnDefinitions[0].Width = new GridLength(compact ? 1 : left, GridUnitType.Star);
+        grid.ColumnDefinitions[1].Width = compact ? new GridLength(0) : new GridLength(right, GridUnitType.Star);
+        Grid.SetColumn(second, compact ? 0 : 1);
+        Grid.SetRow(second, compact ? 1 : 0);
+        first.Margin = new Thickness(0, 0, compact ? 0 : 16, 16);
+    }
 }

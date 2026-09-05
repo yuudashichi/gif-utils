@@ -7,8 +7,8 @@
              FontWeight="Normal" IsVisibleChanged="Editor_IsVisibleChanged" Unloaded="Editor_Unloaded">
     <UserControl.Resources>
         <Style x:Key="TransportBase" TargetType="primitives:ButtonBase">
-            <Setter Property="Width" Value="28" />
-            <Setter Property="Height" Value="26" />
+            <Setter Property="Width" Value="36" />
+            <Setter Property="Height" Value="34" />
             <Setter Property="Padding" Value="2" />
             <Setter Property="Margin" Value="0,0,6,0" />
             <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
@@ -20,7 +20,7 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="primitives:ButtonBase">
-                        <Border x:Name="TransportBorder" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                        <Border CornerRadius="6" x:Name="TransportBorder" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}" Padding="{TemplateBinding Padding}" SnapsToDevicePixels="True">
                             <Border x:Name="KeyboardBorder" BorderBrush="Transparent" BorderThickness="1">
                                 <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
@@ -80,9 +80,9 @@
         </Grid>
         <Grid Margin="0,4,0,0">
             <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-            <TextBlock Text="{Binding Status}" FontSize="11" Foreground="{DynamicResource MutedTextBrush}" TextTrimming="CharacterEllipsis"
+            <TextBlock Text="{Binding Status}" FontSize="12" Foreground="{DynamicResource MutedTextBrush}" TextTrimming="CharacterEllipsis"
                        ToolTip="{Binding Status}" AutomationProperties.LiveSetting="Polite" />
-            <TextBlock Grid.Column="1" Text="{Binding PreviewTimeText}" FontSize="11" Margin="8,0,0,0" />
+            <TextBlock Grid.Column="1" Text="{Binding PreviewTimeText}" FontSize="12" Margin="8,0,0,0" />
         </Grid>
         <ProgressBar Height="2" IsIndeterminate="{Binding IsBusy}" Margin="0,1">
             <ProgressBar.Style><Style TargetType="ProgressBar">

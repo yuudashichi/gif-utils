@@ -60,7 +60,7 @@ public sealed class GifTrimViewModel : ObservableObject
     public string PositionText => $"{VideoTimeRange.Format(Position)} / {VideoTimeRange.Format(Duration)}";
     public double PreviewPosition => _previewPosition;
     public string PreviewTimeText => _showBoundaryTime ? $"边界 {VideoTimeRange.Format(PreviewPosition)} / {VideoTimeRange.Format(Duration)}" : PositionText;
-    public string SelectionText => RangeError.Length == 0 && HasVideo ? $"选中 {VideoTimeRange.Format(End - Start)}" : "选区无效";
+    public string SelectionText => !HasVideo ? "" : RangeError.Length == 0 ? $"选中 {VideoTimeRange.Format(End - Start)}" : "选区无效";
     public string RangeError { get => _rangeError; private set => SetProperty(ref _rangeError, value); }
     public string Status { get => _status; private set => SetProperty(ref _status, value); }
     public string PreviewError { get => _previewError; private set => SetProperty(ref _previewError, value); }
