@@ -1,5 +1,8 @@
 # GIF Utils
 
+<img width="1384" height="992" alt="image" src="https://github.com/user-attachments/assets/751f2425-85dd-40ec-8e39-068d89559a94" />
+
+
 Windows 桌面工具，提供四项功能：
 - **MP4 转 GIF**：截取片段、预览视频、调整 GIF 大小。
 - **字幕烧录**：将字幕嵌入视频，支持 CPU / GPU 编码。
